@@ -1,5 +1,6 @@
 import requests
 import sys
+from core import *
 
 def get_rel_vol(ticker, range, interval='1m'):
     try:
