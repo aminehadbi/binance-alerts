@@ -1,23 +1,7 @@
 import requests
 import sys
-from core import *
-
-def get_rel_vol(ticker, range, interval='1m'):
-    try:
-        total_vol = 0
-        url = 'https://fapi.binance.com/fapi/v1/klines?symbol='+ticker+'&interval='+interval+'&limit='+str(range)
-        data = requests.get(url)
-        candles = data.json()
-        for i in candles:
-            total_vol += float(i[5])
-        #print(candles[-1])
-        current_ratio = round(100*float(candles[-1][5])/total_vol,2)
-        current_volume = float(candles[-1][5])
-        #print('Current Ratio:', current_ratio,'%', 'Current Volume:', current_volume)
-        return current_ratio, current_volume
-    except Exception as E:
-        print(E, ticker)
-        return 0, 0
+import multiprocessing
+from datetime import datetime
 
 def get_ticker_list():
     ticker_list = []
@@ -25,44 +9,88 @@ def get_ticker_list():
     data = requests.get(url)
     candles = data.json()
     for i in candles['symbols']:
-        #print(i)
         ticker_list.append(i['symbol'])
     return ticker_list
 
 
-def scan_market(ticker, interval='15m'):
+def get_candles(ticker, range, interval='1m'):
+    url = "".join(('https://fapi.binance.com/fapi/v1/klines?symbol=',ticker,'&interval=',interval,'&limit=',str(range)))
+    data = requests.get(url)
+    candles = data.json()
+    return candles
 
+def calculate_rel_vol(candles):
+    total_vol = 0
+    for i in candles:
+        total_vol += float(i[5])
+    current_ratio = round(100*float(candles[-1][5])/float(total_vol),2)
+    current_volume = float(candles[-1][5])
+    return current_ratio, current_volume
+
+def get_rel_vol(ticker, range, interval='1m'):
+    try:
+        candles = get_candles(ticker, range, interval)
+        current_ratio, current_volume = calculate_rel_vol(candles)
+        return current_ratio, current_volume
+    except Exception:
+        print(Exception)
+        return 1, 1
+
+
+def scan_market(ticker, interval='1m', range='15'):
     results = {}
-        #print(i)
-    current_ratio, current_volume = get_rel_vol(ticker, 15, interval)
+    #print(ticker, interval, range)
+    current_ratio, current_volume = get_rel_vol(ticker, range, interval)
     if current_ratio > 10:
-            print('Current Ratio:', current_ratio,'%', 'Current Volume:', current_volume, interval)
-            results[interval] = current_ratio
+            print('Current Ratio:', current_ratio, 'Current Volume:', current_volume, interval)
+    #        results[interval] = current_ratio
+    return [current_ratio, current_volume, interval]
 
-    sorted_values = sorted(results.values()) # Sort the values
-    sorted_dict = {}
-
-    for i in sorted_values:
-        for k in results.keys():
-            if results[k] == i:
-                sorted_dict[k] = results[k]
-                break
-    return sorted_dict
 
 
 def main(value):
-    filter_list = ['1m', '5m', '15m', '1h', '4h']
     ticker_list = get_ticker_list()
-
+    print('Tickers list downloaded')
     results_list = []
-    if value in filter_list:
-        results = scan_market(value)
-    else:
-       for j in ticker_list: 
-            for i in filter_list:
-                results = scan_market(j, i)
-                results_list.append(results)
+    try:
+        processes = []
+        p = multiprocessing.Process(target=scan_all_markets, args=(ticker_list,))
+        processes.append(p)
+        p.start()
+        for process in processes:
+            process.join()
+    except:
+        pass
+
+
+def scan_all_markets(ticker_list):
+    filter_list = ['1m', '5m', '15m', '1h', '4h']
+    #print(filter_list, ticker_list)
+    for ticker in ticker_list:
+        results = []
+        #print('!!!', ticker)
+        for i in filter_list:
+            a = scan_market(ticker, i, 15)
+            results.append(a[0])
+        ressum = sum(results)
+        print(ticker, results, round(ressum))
+        with open('your_file.txt', 'a') as f:
+            f.write(str(ticker)+" "+str(results)+'\n')
+
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    now = datetime.now()
+
+    timestamp = datetime.timestamp(now)
+    with open('your_file.txt', 'a') as f:
+        dt_object = datetime.fromtimestamp(timestamp)
+        f.write(str(dt_object)+ '\n')
+
+    main('a')
+
+    now = datetime.now()
+    timestamp = datetime.timestamp(now)
+    with open('your_file.txt', 'a') as f:
+        dt_object = datetime.fromtimestamp(timestamp)
+        f.write(str(dt_object)+'\n')
